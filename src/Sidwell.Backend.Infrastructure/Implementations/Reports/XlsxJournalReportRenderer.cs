@@ -19,6 +19,8 @@ public sealed class XlsxJournalReportRenderer : IJournalReportRenderer
 
         using XLWorkbook workbook = new();
         BuildNoteSheet(workbook, context);
+        if (context.TickerAnalysis is not null)
+            BuildAnalysisSheets(workbook, context.TickerAnalysis);
 
         if (context.IncludeAttachments)
         {
@@ -119,6 +121,73 @@ public sealed class XlsxJournalReportRenderer : IJournalReportRenderer
                 row++;
             }
         }
+    }
+
+    private static void BuildAnalysisSheets(XLWorkbook workbook, TickerDetail detail)
+    {
+        WriteFactsSheet(workbook, "Snapshot", ReportSectionData.BuildHeaderFacts(detail));
+        WriteFactsSheet(workbook, "Composite", ReportSectionData.BuildCompositeFacts(detail.Composite));
+        WriteFactsSheet(workbook, "Key stats", ReportSectionData.BuildKeyStatsFacts(detail.KeyStats));
+        WriteFactsSheet(workbook, "Dividends", ReportSectionData.BuildDividendFacts(detail.Dividends));
+
+        if (detail.Holding is not null)
+            WriteFactsSheet(workbook, "Holding", ReportSectionData.BuildHoldingFacts(detail.Holding));
+
+        WriteTableSheet(workbook, "Algorithms", ReportSectionData.BuildAlgorithmsTable(detail.Algorithms));
+
+        if (detail.GatedAlgos.Count > 0)
+            WriteTableSheet(workbook, "Algos gated", ReportSectionData.BuildGatedAlgosTable(detail.GatedAlgos));
+
+        if (detail.Fundamentals.Count > 0)
+            WriteTableSheet(workbook, "Fundamentals", ReportSectionData.BuildFundamentalsTable(detail.Fundamentals));
+
+        if (detail.Price.History.Count > 0)
+            WriteTableSheet(workbook, "Price history", ReportSectionData.BuildPriceHistoryTable(detail.Price.History));
+
+        if (detail.News.Count > 0)
+            WriteTableSheet(workbook, "News", ReportSectionData.BuildNewsTable(detail.News));
+    }
+
+    private static void WriteFactsSheet(XLWorkbook workbook, string sheetName, IReadOnlyList<(string Label, string Value)> facts)
+    {
+        if (facts.Count == 0) return;
+
+        IXLWorksheet ws = workbook.Worksheets.Add(MakeUniqueSheetName(workbook, sheetName));
+        ws.Column(1).Width = 30;
+        ws.Column(2).Width = 60;
+
+        for (int i = 0; i < facts.Count; i++)
+        {
+            IXLCell labelCell = ws.Cell(i + 1, 1);
+            labelCell.Value = facts[i].Label;
+            labelCell.Style.Font.Bold = true;
+            labelCell.Style.Font.FontColor = MutedGray;
+
+            ws.Cell(i + 1, 2).Value = facts[i].Value;
+        }
+    }
+
+    private static void WriteTableSheet(XLWorkbook workbook, string sheetName, ReportTable data)
+    {
+        IXLWorksheet ws = workbook.Worksheets.Add(MakeUniqueSheetName(workbook, sheetName));
+
+        for (int c = 0; c < data.Headers.Count; c++)
+        {
+            IXLCell headerCell = ws.Cell(1, c + 1);
+            headerCell.Value = data.Headers[c];
+            headerCell.Style.Font.Bold = true;
+            headerCell.Style.Font.FontColor = XLColor.White;
+            headerCell.Style.Fill.BackgroundColor = BrandAccent;
+        }
+
+        for (int r = 0; r < data.Rows.Count; r++)
+        {
+            IReadOnlyList<string> row = data.Rows[r];
+            for (int c = 0; c < data.Headers.Count && c < row.Count; c++)
+                ws.Cell(r + 2, c + 1).Value = row[c];
+        }
+
+        ws.Columns().AdjustToContents();
     }
 
     private static bool IsXlsxMimeType(string mimeType) =>

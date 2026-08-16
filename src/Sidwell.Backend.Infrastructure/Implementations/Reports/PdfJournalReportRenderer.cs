@@ -233,12 +233,115 @@ public sealed class PdfJournalReportRenderer : IJournalReportRenderer
         AddCover(section, context);
         AddSections(section, context.Note);
 
+        if (context.TickerAnalysis is not null)
+            AddTickerAnalysis(section, context.TickerAnalysis);
+
         if (context.IncludeAttachments && context.Note.Attachments.Count > 0)
             AddAttachmentsAppendix(section, context.Note.Attachments);
 
         AddFooter(section);
 
         return document;
+    }
+
+    private static void AddTickerAnalysis(Section section, TickerDetail detail)
+    {
+        AddSectionTitle(section, "Ticker snapshot");
+        AddFactsGrid(section, ReportSectionData.BuildHeaderFacts(detail));
+
+        AddSectionTitle(section, "Composite verdict");
+        AddFactsGrid(section, ReportSectionData.BuildCompositeFacts(detail.Composite));
+
+        AddSectionTitle(section, "Key statistics");
+        AddFactsGrid(section, ReportSectionData.BuildKeyStatsFacts(detail.KeyStats));
+
+        AddSectionTitle(section, "Dividends");
+        AddFactsGrid(section, ReportSectionData.BuildDividendFacts(detail.Dividends));
+
+        if (detail.Holding is not null)
+        {
+            AddSectionTitle(section, "Your holding");
+            AddFactsGrid(section, ReportSectionData.BuildHoldingFacts(detail.Holding));
+        }
+
+        AddReportTable(section, ReportSectionData.BuildAlgorithmsTable(detail.Algorithms));
+
+        if (detail.GatedAlgos.Count > 0)
+            AddReportTable(section, ReportSectionData.BuildGatedAlgosTable(detail.GatedAlgos));
+
+        if (detail.Fundamentals.Count > 0)
+            AddReportTable(section, ReportSectionData.BuildFundamentalsTable(detail.Fundamentals));
+
+        if (detail.Price.History.Count > 0)
+            AddReportTable(section, ReportSectionData.BuildPriceHistoryTable(detail.Price.History));
+
+        if (detail.News.Count > 0)
+            AddReportTable(section, ReportSectionData.BuildNewsTable(detail.News));
+    }
+
+    private static void AddSectionTitle(Section section, string title)
+    {
+        Paragraph heading = section.AddParagraph(title);
+        heading.Format.Font.Size = 12;
+        heading.Format.Font.Bold = true;
+        heading.Format.Font.Color = BrandAccent;
+        heading.Format.SpaceBefore = Unit.FromPoint(16);
+        heading.Format.SpaceAfter = Unit.FromPoint(6);
+    }
+
+    private static void AddFactsGrid(Section section, IReadOnlyList<(string Label, string Value)> facts)
+    {
+        if (facts.Count == 0) return;
+
+        Table table = section.AddTable();
+        table.AddColumn(Unit.FromCentimeter(6));
+        table.AddColumn(Unit.FromCentimeter(11));
+
+        foreach ((string label, string value) in facts)
+        {
+            Row row = table.AddRow();
+            Paragraph l = row.Cells[0].AddParagraph(label);
+            l.Format.Font.Size = 9;
+            l.Format.Font.Color = MutedGray;
+            Paragraph v = row.Cells[1].AddParagraph(value);
+            v.Format.Font.Size = 9.5;
+            v.Format.Font.Color = BrandNavy;
+        }
+        table.Rows.LeftIndent = Unit.FromPoint(0);
+    }
+
+    private static void AddReportTable(Section section, ReportTable data)
+    {
+        AddSectionTitle(section, data.Title);
+
+        Table table = section.AddTable();
+        table.Borders.Width = Unit.FromPoint(0.25);
+        table.Borders.Color = BorderGray;
+
+        double colWidth = 17.0 / data.Headers.Count;
+        for (int i = 0; i < data.Headers.Count; i++)
+            table.AddColumn(Unit.FromCentimeter(colWidth));
+
+        Row headerRow = table.AddRow();
+        headerRow.Shading.Color = BrandAccent;
+        for (int i = 0; i < data.Headers.Count; i++)
+        {
+            Paragraph p = headerRow.Cells[i].AddParagraph(data.Headers[i]);
+            p.Format.Font.Size = 8;
+            p.Format.Font.Bold = true;
+            p.Format.Font.Color = Colors.White;
+        }
+
+        foreach (IReadOnlyList<string> rowData in data.Rows)
+        {
+            Row r = table.AddRow();
+            for (int i = 0; i < data.Headers.Count && i < rowData.Count; i++)
+            {
+                Paragraph p = r.Cells[i].AddParagraph(rowData[i]);
+                p.Format.Font.Size = 7.5;
+                p.Format.Font.Color = BrandNavy;
+            }
+        }
     }
 
     private static void AddCover(Section section, JournalReportContext context)
@@ -305,12 +408,7 @@ public sealed class PdfJournalReportRenderer : IJournalReportRenderer
 
     private static void AddAttachmentsAppendix(Section section, IReadOnlyList<TickerNoteAttachmentDto> attachments)
     {
-        Paragraph heading = section.AddParagraph("Attachments");
-        heading.Format.Font.Size = 9;
-        heading.Format.Font.Bold = true;
-        heading.Format.Font.Color = BrandAccent;
-        heading.Format.SpaceBefore = Unit.FromPoint(18);
-        heading.Format.SpaceAfter = Unit.FromPoint(4);
+        AddSectionTitle(section, "Attachments");
 
         foreach (TickerNoteAttachmentDto a in attachments)
         {

@@ -7,7 +7,11 @@ using Sidwell.Backend.Application.Dtos;
 
 namespace Sidwell.Backend.Application.Implementations;
 
-public sealed class JournalReportService(IUnitOfWork uow, ICurrentUserAccessor currentUser, IEnumerable<IJournalReportRenderer> renderers) : IJournalReportService
+public sealed class JournalReportService(
+    IUnitOfWork uow,
+    ICurrentUserAccessor currentUser,
+    ITickerDetailService tickerDetailService,
+    IEnumerable<IJournalReportRenderer> renderers) : IJournalReportService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -33,7 +37,11 @@ public sealed class JournalReportService(IUnitOfWork uow, ICurrentUserAccessor c
 
         TickerNoteDto note = ToDto(row);
 
-        JournalReportContext context = new(symbol.ToUpperInvariant(), ResolveAuthorName(), note, includeAttachments);
+        TickerDetail? tickerAnalysis = null;
+        try { tickerAnalysis = await tickerDetailService.GetBySymbolAsync(userId, symbol, ct); }
+        catch { /* if analysis fails to load, still generate the report with just the note content */ }
+
+        JournalReportContext context = new(symbol.ToUpperInvariant(), ResolveAuthorName(), note, includeAttachments, tickerAnalysis);
 
         IJournalReportRenderer renderer = renderers.FirstOrDefault(r => r.CanRender(format))
             ?? throw new NotSupportedException($"No renderer registered for report format '{format}'.");

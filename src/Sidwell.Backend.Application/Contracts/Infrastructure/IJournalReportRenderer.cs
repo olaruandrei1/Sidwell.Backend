@@ -18,7 +18,8 @@ public sealed record JournalReportContext(
     string Symbol,
     string AuthorName,
     TickerNoteDto Note,
-    bool IncludeAttachments
+    bool IncludeAttachments,
+    TickerDetail? TickerAnalysis
 );
 
 public interface IJournalReportRenderer
