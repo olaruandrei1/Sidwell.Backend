@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Sidwell.Backend.API.Auth;
@@ -17,12 +16,11 @@ public sealed class TickerController(
     ITransactionService transactionService,
     ICurrentUserAccessor currentUser,
     IAlgorithmMetadataService metadataService,
-    IGeminiClient gemini,
-    IRedisService redis,
-    ISyncTrigger syncTrigger
+    ISyncTrigger syncTrigger,
+    ITickerIndicatorsService indicatorsService,
+    ITickerVerdictService verdictService
 ) : ControllerBase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     [HttpGet("search")]
     public async Task<ActionResult<IReadOnlyList<TickerSummary>>> Search([FromQuery] string q, CancellationToken ct)
     {
@@ -92,46 +90,24 @@ public sealed class TickerController(
         return Ok(metadataService.GetAll());
     }
 
-    [HttpPost("{symbol}/verdict")]
-    public async Task<IActionResult> GetVerdict(string symbol, CancellationToken ct)
+    [HttpGet("{symbol}/indicators")]
+    public async Task<IActionResult> GetIndicators(string symbol, [FromQuery] string types, CancellationToken ct)
     {
-        TickerDetail? detail = await tickerDetailService.GetBySymbolAsync(ResolveUserId(), symbol, ct);
-        if (detail is null)
-            return NotFound();
+        string[] requested = (types ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (requested.Length == 0)
+            return BadRequest(new { error = "Query param 'types' is required (comma-separated, e.g. sma20,ema50,rsi14)." });
 
-        // Key the cache on the score fingerprint so a fresh recalc (e.g. N/A -> real
-        // scores) produces a new verdict instead of serving the stale cached one.
-        string fingerprint = BuildVerdictFingerprint(detail);
-        string cacheKey = $"sidwell:verdict:{symbol.ToLowerInvariant()}:{fingerprint}";
-
-        string? cached = await redis.GetAsync(cacheKey, ct);
-        if (cached is not null)
-        {
-            GeminiVerdictResult? cachedResult = JsonSerializer.Deserialize<GeminiVerdictResult>(cached, JsonOptions);
-            if (cachedResult is not null)
-                return Ok(cachedResult);
-        }
-
-        string? compositeLabel = detail.Composite?.Label;
-        GeminiVerdictResult? verdict = await gemini.SynthesizeVerdictAsync(symbol, detail.Algorithms, compositeLabel, ct);
-        if (verdict is null)
-            return StatusCode(503);
-
-        await redis.SetAsync(cacheKey, JsonSerializer.Serialize(verdict, JsonOptions), TimeSpan.FromHours(6), ct);
-
-        return Ok(verdict);
+        return Ok(await indicatorsService.GetIndicatorsAsync(symbol, requested, ct));
     }
 
-    private static string BuildVerdictFingerprint(TickerDetail detail)
+    [HttpGet("{symbol}/verdict")]
+    public async Task<IActionResult> GetTechnicalVerdict(string symbol, [FromQuery] string types, CancellationToken ct)
     {
-        string composite = detail.Composite?.Score ?? "na";
-        IEnumerable<string> algoParts = detail.Algorithms
-            .OrderBy(a => a.Name, StringComparer.Ordinal)
-            .Select(a => $"{a.Name}={a.Score ?? "na"}");
-        string raw = $"{composite}|{string.Join(",", algoParts)}";
+        string[] requested = (types ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (requested.Length == 0)
+            return BadRequest(new { error = "Query param 'types' is required (comma-separated, e.g. sma20,ema50,rsi14)." });
 
-        byte[] hash = System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(raw));
-        return Convert.ToHexString(hash, 0, 6).ToLowerInvariant();
+        return Ok(await verdictService.GetVerdictAsync(symbol, requested, ct));
     }
 
     [HttpPost("{symbol}/sync")]

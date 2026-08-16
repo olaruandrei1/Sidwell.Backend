@@ -1,4 +1,3 @@
-using Sidwell.Backend.Application.Dtos;
 using Sidwell.Backend.Domain.Enums;
 
 namespace Sidwell.Backend.Application.Contracts.Infrastructure;
@@ -32,14 +31,6 @@ public sealed record GeminiReceiptResult(
     IReadOnlyList<GeminiReceiptItem>? Items
 );
 
-public sealed record GeminiVerdictResult(
-    string Verdict,
-    string Summary,
-    bool RiskWorthIt,
-    int? ProbabilisticWin,
-    string Coloring
-);
-
 public interface IGeminiClient
 {
     Task<GeminiBrokerFeeResult?> FetchBrokerFeesAsync(Broker broker, string market, CancellationToken ct = default);
@@ -47,10 +38,4 @@ public interface IGeminiClient
     Task<GeminiDividendInfoResult?> FetchDividendInfoAsync(string symbol, CancellationToken ct = default);
 
     Task<GeminiReceiptResult?> ParseReceiptAsync(byte[] image, string mimeType, CancellationToken ct = default);
-
-    Task<GeminiVerdictResult?> SynthesizeVerdictAsync(
-        string symbol,
-        IReadOnlyList<AlgoScore> scores,
-        string? compositeLabel,
-        CancellationToken ct = default);
 }

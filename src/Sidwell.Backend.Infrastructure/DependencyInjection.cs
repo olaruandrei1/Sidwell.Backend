@@ -9,6 +9,7 @@ using Sidwell.Backend.Infrastructure.Implementations.Finnhub;
 using Sidwell.Backend.Infrastructure.Implementations.Gemini;
 using Sidwell.Backend.Infrastructure.Implementations.Receipts;
 using Sidwell.Backend.Infrastructure.Implementations.Recalc;
+using Sidwell.Backend.Infrastructure.Implementations.Reports;
 using Sidwell.Backend.Infrastructure.Implementations.Redis;
 using Sidwell.Backend.Infrastructure.Implementations.Sync;
 using Sidwell.Backend.Infrastructure.Implementations.WebPush;
@@ -62,6 +63,9 @@ public static class DependencyInjection
         services.AddSingleton<IGeminiClient, GeminiClient>();
 
         services.AddScoped<IReceiptImageProcessor, ReceiptImageProcessor>();
+        services.AddSingleton<IJournalReportRenderer, PdfJournalReportRenderer>();
+        services.AddSingleton<IJournalReportRenderer, XlsxJournalReportRenderer>();
+        // JournalReportService picks the right one via IEnumerable<IJournalReportRenderer> + CanRender().
         services.AddSingleton<IWebPushService, WebPushService>();
 
         services.Configure<BroadcastOptions>(config.GetSection(BroadcastOptions.SectionName));
@@ -88,6 +92,22 @@ public static class DependencyInjection
                 c.BaseAddress = new Uri(internalSvc.CoreBaseUrl);
         });
         services.AddSingleton<ICoreRecalcTrigger, CoreRecalcTrigger>();
+
+        services.AddHttpClient(CoreIndicatorsClient.HttpClientName, (sp, c) =>
+        {
+            InternalServicesOptions internalSvc = sp.GetRequiredService<IOptions<InternalServicesOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(internalSvc.CoreBaseUrl))
+                c.BaseAddress = new Uri(internalSvc.CoreBaseUrl);
+        });
+        services.AddScoped<ICoreIndicatorsClient, CoreIndicatorsClient>();
+
+        services.AddHttpClient(CoreVerdictClient.HttpClientName, (sp, c) =>
+        {
+            InternalServicesOptions internalSvc = sp.GetRequiredService<IOptions<InternalServicesOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(internalSvc.CoreBaseUrl))
+                c.BaseAddress = new Uri(internalSvc.CoreBaseUrl);
+        });
+        services.AddScoped<ICoreVerdictClient, CoreVerdictClient>();
 
         return services;
     }

@@ -28,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<ITickerNotesService, TickerNotesService>();
+        services.AddScoped<IJournalReportService, JournalReportService>();
+        services.AddScoped<ITickerIndicatorsService, TickerIndicatorsService>();
+        services.AddScoped<ITickerVerdictService, TickerVerdictService>();
 
         return services;
     }

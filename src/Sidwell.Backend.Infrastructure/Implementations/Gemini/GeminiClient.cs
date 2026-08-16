@@ -114,91 +114,6 @@ public sealed class GeminiClient(
         return new GeminiReceiptResult(parsed.Merchant, parsed.Total, date, parsed.Category, items);
     }
 
-    public async Task<GeminiVerdictResult?> SynthesizeVerdictAsync(
-        string symbol,
-        IReadOnlyList<AlgoScore> scores,
-        string? compositeLabel,
-        CancellationToken ct = default)
-    {
-        var algoLines = new StringBuilder();
-        foreach (AlgoScore s in scores)
-        {
-            string context = ExtractAlgoContext(s.Details);
-            string detail = context.Length > 0 ? " — " + context : string.Empty;
-            algoLines.AppendLine($"- {s.Name}: {s.Score ?? "N/A"}{detail}");
-        }
-
-        string prompt = $$"""
-            You are a quantitative financial analyst. Given the algorithmic analysis for {{symbol}}, provide a concise investment verdict.
-
-            Algorithmic scores:
-            {{algoLines}}
-            Composite label: {{compositeLabel ?? "N/A"}}
-
-            Return ONLY valid JSON in this exact shape:
-            {
-              "verdict": "buy" | "hold" | "risky" | "avoid",
-              "summary": "1-2 sentence human-readable synthesis of the quantitative signals",
-              "riskWorthIt": true | false,
-              "probabilisticWin": null or integer 0-100,
-              "coloring": "green" | "yellow" | "red"
-            }
-
-            Coloring logic: "green" if verdict is "buy", "red" if verdict is "avoid", "yellow" otherwise.
-            Base your verdict strictly on the quantitative signals provided. Be concise. Do not hallucinate data not provided.
-            """;
-
-        VerdictPayload? payload = await GenerateStructuredJsonAsync<VerdictPayload>(prompt, ct);
-        if (payload is null)
-            return null;
-
-        string verdict = payload.Verdict?.ToLowerInvariant() is "buy" or "hold" or "risky" or "avoid"
-            ? payload.Verdict.ToLowerInvariant()
-            : "hold";
-
-        string coloring = verdict switch
-        {
-            "buy" => "green",
-            "avoid" => "red",
-            _ => "yellow",
-        };
-
-        if (payload.Coloring?.ToLowerInvariant() is "green" or "yellow" or "red")
-            coloring = payload.Coloring.ToLowerInvariant();
-
-        return new GeminiVerdictResult(verdict, payload.Summary ?? string.Empty, payload.RiskWorthIt, payload.ProbabilisticWin, coloring);
-    }
-
-    private static string ExtractAlgoContext(IReadOnlyDictionary<string, object?>? details)
-    {
-        if (details is null)
-            return string.Empty;
-
-        foreach (string key in new[] { "interpretation", "zone", "flag", "margin_of_safety" })
-        {
-            if (details.TryGetValue(key, out object? val) && val is JsonElement el)
-            {
-                string text = el.ValueKind == JsonValueKind.String
-                    ? el.GetString() ?? string.Empty
-                    : el.ToString();
-                if (!string.IsNullOrWhiteSpace(text))
-                    return text;
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private Task<T?> GenerateStructuredJsonAsync<T>(string prompt, CancellationToken ct) where T : class
-    {
-        object payload = new
-        {
-            contents = new[] { new { parts = new[] { new { text = prompt } } } },
-            generationConfig = new { responseMimeType = "application/json" },
-        };
-
-        return PostGenerateContentAsync<T>(payload, ct);
-    }
 
     private static string? NormalizePayFrequency(string? value)
     {
@@ -320,10 +235,4 @@ public sealed class GeminiClient(
         [property: JsonPropertyName("unit_price")] decimal? UnitPrice,
         [property: JsonPropertyName("amount")] decimal? Amount);
 
-    private sealed record VerdictPayload(
-        [property: JsonPropertyName("verdict")] string? Verdict,
-        [property: JsonPropertyName("summary")] string? Summary,
-        [property: JsonPropertyName("riskWorthIt")] bool RiskWorthIt,
-        [property: JsonPropertyName("probabilisticWin")] int? ProbabilisticWin,
-        [property: JsonPropertyName("coloring")] string? Coloring);
 }
