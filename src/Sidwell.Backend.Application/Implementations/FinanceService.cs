@@ -1069,12 +1069,16 @@ public sealed class FinanceService(
 
         string? netIncomeInRon = null;
         string? exchangeRate = null;
+        string? totalExtraIncomesInRon = null;
 
         if (!string.Equals(currency, "RON", StringComparison.OrdinalIgnoreCase) &&
             ratesToRon.TryGetValue(currency, out decimal rateToRon) && rateToRon > 0m)
         {
             netIncomeInRon = FormatMoney(netIncome * rateToRon);
             exchangeRate = rateToRon.ToString("0.####", CultureInfo.InvariantCulture);
+            // Extras were converted into `currency` above; reproject them into RON so the
+            // frontend can show a coherent RON figure when the user's display currency is RON.
+            totalExtraIncomesInRon = FormatMoney(extras.Sum(x => ConvertCurrency(x.Amount, x.Currency, "RON", ratesToRon)));
         }
 
         return new MonthlyFinanceSummaryDto(
@@ -1091,6 +1095,7 @@ public sealed class FinanceService(
             FreeCash: FormatMoney(freeCash),
             SavingsRatePct: savingsRate.ToString("0.0", CultureInfo.InvariantCulture),
             TotalExtraIncomes: FormatMoney(totalExtraIncomes),
+            TotalExtraIncomesInRon: totalExtraIncomesInRon,
             BrokerNetInvested: brokerNetInvested
         );
     }

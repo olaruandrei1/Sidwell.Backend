@@ -14,5 +14,6 @@ public sealed record MonthlyFinanceSummaryDto(
     string FreeCash,
     string SavingsRatePct,
     string TotalExtraIncomes,
+    string? TotalExtraIncomesInRon,
     IReadOnlyList<BrokerNetInvestedDto> BrokerNetInvested
 );
