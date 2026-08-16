@@ -7,7 +7,7 @@ public interface IJournalReportService
     Task<JournalReportFile> GenerateAsync(
         Guid userId,
         string symbol,
-        Guid noteId,
+        Guid? noteId,
         ReportFormat format,
         bool includeAttachments,
         CancellationToken ct = default);

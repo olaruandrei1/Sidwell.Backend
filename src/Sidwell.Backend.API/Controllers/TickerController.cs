@@ -18,9 +18,22 @@ public sealed class TickerController(
     IAlgorithmMetadataService metadataService,
     ISyncTrigger syncTrigger,
     ITickerIndicatorsService indicatorsService,
-    ITickerVerdictService verdictService
+    ITickerVerdictService verdictService,
+    IJournalReportService reportService
 ) : ControllerBase
 {
+    [HttpPost("{symbol}/report")]
+    public async Task<IActionResult> GenerateReport(string symbol, [FromBody] GenerateReportRequest request, CancellationToken ct)
+    {
+        if (!Enum.TryParse(request.Format, ignoreCase: true, out ReportFormat format))
+            return BadRequest($"Unknown report format '{request.Format}'.");
+
+        JournalReportFile file = await reportService.GenerateAsync(
+            ResolveUserId(), symbol, noteId: null, format, request.IncludeAttachments, ct);
+
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     [HttpGet("search")]
     public async Task<ActionResult<IReadOnlyList<TickerSummary>>> Search([FromQuery] string q, CancellationToken ct)
     {

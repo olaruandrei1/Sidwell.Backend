@@ -27,15 +27,29 @@ public sealed class JournalReportService(
     public async Task<JournalReportFile> GenerateAsync(
         Guid userId,
         string symbol,
-        Guid noteId,
+        Guid? noteId,
         ReportFormat format,
         bool includeAttachments,
         CancellationToken ct = default)
     {
-        NoteRow row = await uow.Dapper.QueryFirstOrDefaultAsync<NoteRow>(SelectNoteByIdSql, new { noteId, userId }, ct: ct)
-            ?? throw new NotFoundException($"Note '{noteId}' not found.");
-
-        TickerNoteDto note = ToDto(row);
+        TickerNoteDto note;
+        if (noteId is { } id)
+        {
+            NoteRow row = await uow.Dapper.QueryFirstOrDefaultAsync<NoteRow>(SelectNoteByIdSql, new { noteId = id, userId }, ct: ct)
+                ?? throw new NotFoundException($"Note '{id}' not found.");
+            note = ToDto(row);
+        }
+        else
+        {
+            // Analysis-only report — synthetic empty note so the renderer skips the note section cleanly
+            note = new TickerNoteDto(
+                Guid.Empty.ToString(),
+                $"{symbol.ToUpperInvariant()} — Analysis snapshot",
+                [],
+                [],
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow);
+        }
 
         TickerDetail? tickerAnalysis = null;
         try { tickerAnalysis = await tickerDetailService.GetBySymbolAsync(userId, symbol, ct); }
