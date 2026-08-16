@@ -217,7 +217,6 @@ public sealed class PdfJournalReportRenderer : IJournalReportRenderer
         Document document = new();
         document.Info.Title = $"{context.Symbol} — {context.Note.Title}";
         document.Info.Author = context.AuthorName;
-        document.DefaultPageSetup.PageFormat = PageFormat.A4;
 
         Style normal = document.Styles["Normal"] ?? document.Styles.AddStyle("Normal", "");
         normal.Font.Name = LiberationFontResolver.FamilyName;
@@ -225,6 +224,7 @@ public sealed class PdfJournalReportRenderer : IJournalReportRenderer
         normal.Font.Color = BrandNavy;
 
         Section section = document.AddSection();
+        section.PageSetup.PageFormat = PageFormat.A4;
         section.PageSetup.TopMargin = Unit.FromCentimeter(2.2);
         section.PageSetup.BottomMargin = Unit.FromCentimeter(2);
         section.PageSetup.LeftMargin = Unit.FromCentimeter(2);
