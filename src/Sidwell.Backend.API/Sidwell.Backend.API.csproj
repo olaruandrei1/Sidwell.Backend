@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sidwell.Backend.Application\Sidwell.Backend.Application.csproj" />
+    <ProjectReference Include="..\Sidwell.Backend.Infrastructure\Sidwell.Backend.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sidwell.Backend.Persistence\Sidwell.Backend.Persistence.csproj" />
+    <ProjectReference Include="..\Sidwell.Backend.BackgroundServices\Sidwell.Backend.BackgroundServices.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+  </ItemGroup>
+
+</Project>

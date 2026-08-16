@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sidwell.Backend.API/Sidwell.Backend.API.csproj" />
+    <Project Path="src/Sidwell.Backend.Application/Sidwell.Backend.Application.csproj" />
+    <Project Path="src/Sidwell.Backend.BackgroundServices/Sidwell.Backend.BackgroundServices.csproj" />
+    <Project Path="src/Sidwell.Backend.Domain/Sidwell.Backend.Domain.csproj" />
+    <Project Path="src/Sidwell.Backend.Infrastructure/Sidwell.Backend.Infrastructure.csproj" />
+    <Project Path="src/Sidwell.Backend.Persistence/Sidwell.Backend.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sidwell.Backend.Tests/Sidwell.Backend.Tests.csproj" />
+  </Folder>
+</Solution>
