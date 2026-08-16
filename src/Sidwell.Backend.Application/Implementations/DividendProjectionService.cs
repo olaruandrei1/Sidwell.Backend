@@ -163,8 +163,6 @@ public sealed class DividendProjectionService(
 
         for (int i = 0; i < years; i++)
         {
-            dps *= 1 + growth;
-
             decimal gross = currentShares * dps;
             decimal net = gross * (1 - taxRate);
 
@@ -175,6 +173,8 @@ public sealed class DividendProjectionService(
 
             annual[i] = net;
             cumulative[i] = cumulativeNet;
+
+            dps *= 1 + growth;
         }
 
         return new Scenario(annual, cumulative, currentShares);
