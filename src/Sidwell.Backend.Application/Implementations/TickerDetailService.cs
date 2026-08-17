@@ -12,6 +12,7 @@ public sealed class TickerDetailService(
     ISettingsService settingsService,
     ILookupQueue queue,
     IFinnhubMetricsClient finnhub,
+    IYfinanceMetricsClient yfinanceMetrics,
     ICoreRecalcTrigger recalcTrigger
 ) : ITickerDetailService
 {
@@ -178,6 +179,7 @@ public sealed class TickerDetailService(
             uow.Dapper.QueryFirstOrDefaultAsync<TickerDividendRow>(DividendSql, new { tickerId = ticker.Id }, ct: ct);
 
         Task<FinnhubStockMetrics?> finnhubTask = finnhub.GetMetricsAsync(ticker.Symbol, ct);
+        Task<YfinanceStockMetrics?> yfinanceTask = yfinanceMetrics.GetMetricsAsync(ticker.Symbol, ct);
 
         await Task.WhenAll(
             latestTask,
@@ -190,7 +192,8 @@ public sealed class TickerDetailService(
             noteTask,
             watchlistedTask,
             dividendTask,
-            finnhubTask
+            finnhubTask,
+            yfinanceTask
         );
 
         CompositeRow? compositeRow = compositeTask.Result;
@@ -261,7 +264,7 @@ public sealed class TickerDetailService(
             : null;
 
         DividendInfoDto dividends = BuildDividends(ticker.Symbol, ticker.Id, dividendTask.Result);
-        KeyStatsDto keyStats = BuildKeyStats(historyTask.Result, fundamentalsTask.Result, latestTask.Result, finnhubTask.Result);
+        KeyStatsDto keyStats = BuildKeyStats(historyTask.Result, fundamentalsTask.Result, latestTask.Result, finnhubTask.Result, yfinanceTask.Result);
 
         return new TickerDetail(
             new TickerDetailTicker(ticker.Symbol, ticker.Name, ticker.Exchange, ticker.Currency, ticker.SecCik),
@@ -297,7 +300,7 @@ public sealed class TickerDetailService(
         );
     }
 
-    private static KeyStatsDto BuildKeyStats(IReadOnlyList<PriceBar> history, IReadOnlyList<FundamentalPeriod> fundamentals, PriceBar? latest, FinnhubStockMetrics? finnhub)
+    private static KeyStatsDto BuildKeyStats(IReadOnlyList<PriceBar> history, IReadOnlyList<FundamentalPeriod> fundamentals, PriceBar? latest, FinnhubStockMetrics? finnhub, YfinanceStockMetrics? yfinance)
     {
         DateOnly cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-365));
 
@@ -393,11 +396,25 @@ public sealed class TickerDetailService(
                 evToEbitda = (mc / ebit).ToString("F2", CultureInfo.InvariantCulture);
         }
 
-        int? analystBuy = finnhub?.Consensus?.Buy;
-        int? analystHold = finnhub?.Consensus?.Hold;
-        int? analystSell = finnhub?.Consensus?.Sell;
+        // Last-resort fallback from yfinance — covers exchanges Finnhub doesn't (e.g. BVB/.RO),
+        // where the local-fundamentals fallback above also has nothing to work with because
+        // `fundamentals` is SEC-only and empty for those tickers.
+        beta ??= yfinance?.Beta?.ToString("F2", CultureInfo.InvariantCulture);
+        targetOneYear ??= yfinance?.TargetOneYear?.ToString("F2", CultureInfo.InvariantCulture);
+        earningsDate ??= yfinance?.NextEarningsDate;
+        peTrailing ??= yfinance?.PeTrailingTtm?.ToString("F2", CultureInfo.InvariantCulture);
+        priceToBook ??= yfinance?.PriceToBook?.ToString("F2", CultureInfo.InvariantCulture);
+        roeTtm ??= yfinance?.RoeTtm?.ToString("F2", CultureInfo.InvariantCulture);
+        debtToEquity ??= yfinance?.DebtToEquity?.ToString("F2", CultureInfo.InvariantCulture);
+        revenueGrowth ??= yfinance?.RevenueGrowthTtmYoy?.ToString("F2", CultureInfo.InvariantCulture);
+        evToEbitda ??= yfinance?.EvToEbitda?.ToString("F2", CultureInfo.InvariantCulture);
+        marketCap ??= yfinance?.MarketCap?.ToString("F2", CultureInfo.InvariantCulture);
+
+        int? analystBuy = finnhub?.Consensus?.Buy ?? yfinance?.Consensus?.Buy;
+        int? analystHold = finnhub?.Consensus?.Hold ?? yfinance?.Consensus?.Hold;
+        int? analystSell = finnhub?.Consensus?.Sell ?? yfinance?.Consensus?.Sell;
         string? analystConsensus = null;
-        if (finnhub?.Consensus is { } consensus)
+        if ((finnhub?.Consensus ?? yfinance?.Consensus) is { } consensus)
         {
             int total = consensus.Buy + consensus.Hold + consensus.Sell;
             if (total > 0)

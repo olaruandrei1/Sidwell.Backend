@@ -13,6 +13,7 @@ using Sidwell.Backend.Infrastructure.Implementations.Reports;
 using Sidwell.Backend.Infrastructure.Implementations.Redis;
 using Sidwell.Backend.Infrastructure.Implementations.Sync;
 using Sidwell.Backend.Infrastructure.Implementations.WebPush;
+using Sidwell.Backend.Infrastructure.Implementations.Yfinance;
 using StackExchange.Redis;
 
 namespace Sidwell.Backend.Infrastructure;
@@ -28,6 +29,7 @@ public static class DependencyInjection
         services.Configure<FinanceOptions>(config.GetSection(FinanceOptions.SectionName));
         services.Configure<WebPushOptions>(config.GetSection(WebPushOptions.SectionName));
         services.Configure<FinnhubOptions>(config.GetSection(FinnhubOptions.SectionName));
+        services.Configure<YfinanceOptions>(config.GetSection(YfinanceOptions.SectionName));
 
         string redisConnection = config.GetSection(RedisOptions.SectionName).Get<RedisOptions>()?.ConnectionString
             ?? "localhost:6379";
@@ -51,6 +53,15 @@ public static class DependencyInjection
             c.Timeout = TimeSpan.FromSeconds(10);
         });
         services.AddScoped<IFinnhubMetricsClient, FinnhubMetricsClient>();
+
+        services.AddHttpClient(YfinanceMetricsClient.HttpClientName, (sp, c) =>
+        {
+            YfinanceOptions yfinance = sp.GetRequiredService<IOptions<YfinanceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(yfinance.BaseUrl))
+                c.BaseAddress = new Uri(yfinance.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddScoped<IYfinanceMetricsClient, YfinanceMetricsClient>();
 
         services.AddHttpClient(GeminiClient.HttpClientName, (sp, c) =>
         {
