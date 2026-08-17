@@ -110,21 +110,26 @@ public sealed class FinanceService(
         SELECT monthly_income_amount AS MonthlyIncomeAmount,
                monthly_income_currency AS MonthlyIncomeCurrency,
                banks::text AS Banks,
-               brokers::text AS Brokers
+               brokers::text AS Brokers,
+               category_types::text AS CategoryTypes
         FROM finance_settings
         WHERE user_id = @userId;
         """;
 
     private const string UpsertSettingsSql = """
-        INSERT INTO finance_settings (user_id, monthly_income_amount, monthly_income_currency, banks, brokers, updated_at)
-        VALUES (@userId, @amount, @currency, @banks::jsonb, @brokers::jsonb, now())
+        INSERT INTO finance_settings (user_id, monthly_income_amount, monthly_income_currency, banks, brokers, category_types, updated_at)
+        VALUES (@userId, @amount, @currency, @banks::jsonb, @brokers::jsonb, @categoryTypes::jsonb, now())
         ON CONFLICT (user_id) DO UPDATE SET
             monthly_income_amount = EXCLUDED.monthly_income_amount,
             monthly_income_currency = EXCLUDED.monthly_income_currency,
             banks = EXCLUDED.banks,
             brokers = EXCLUDED.brokers,
+            category_types = EXCLUDED.category_types,
             updated_at = now();
         """;
+
+    private const string SelectCategoryTypesJsonSql =
+        "SELECT category_types::text FROM finance_settings WHERE user_id = @userId;";
 
     private const string SelectCategoriesSql = """
         SELECT id AS Id, name AS Name, type AS Type, is_default AS IsDefault
@@ -422,18 +427,24 @@ public sealed class FinanceService(
         string currency = NormalizeCurrency(settings.MonthlyIncome?.Currency);
         string banksJson = JsonSerializer.Serialize(settings.Banks ?? []);
         string brokersJson = JsonSerializer.Serialize(settings.Brokers ?? []);
+        IReadOnlyList<FinanceCategoryTypeDef> customTypes = settings.CategoryTypes ?? [];
+        string categoryTypesJson = JsonSerializer.Serialize(customTypes);
 
         await uow.Dapper.ExecuteAsync(
             UpsertSettingsSql,
-            new { userId, amount, currency, banks = banksJson, brokers = brokersJson },
+            new { userId, amount, currency, banks = banksJson, brokers = brokersJson, categoryTypes = categoryTypesJson },
             ct
         );
 
         await uow.Dapper.ExecuteAsync(DeleteCategoriesSql, new { userId }, ct);
 
+        HashSet<string> validTypeCodes = new(CategoryTypes, StringComparer.OrdinalIgnoreCase);
+        foreach (FinanceCategoryTypeDef customType in customTypes)
+            validTypeCodes.Add(customType.Code.Trim().ToUpperInvariant());
+
         foreach (FinanceCategoryDef category in settings.Categories ?? [])
         {
-            string type = NormalizeCategoryType(category.Type);
+            string type = NormalizeCategoryType(category.Type, validTypeCodes);
             Guid id = Guid.TryParse(category.Id, out Guid parsed) ? parsed : Guid.NewGuid();
 
             await uow.Dapper.ExecuteAsync(
@@ -577,7 +588,8 @@ public sealed class FinanceService(
 
     public async Task<ExpenseItemDto> AddExpenseAsync(Guid userId, AddExpenseCommand command, CancellationToken ct = default)
     {
-        string type = NormalizeCategoryType(command.Type);
+        HashSet<string> validTypeCodes = await GetValidCategoryTypeCodesAsync(userId, ct);
+        string type = NormalizeCategoryType(command.Type, validTypeCodes);
         string status = NormalizeStatus(command.Status);
         string month = string.IsNullOrWhiteSpace(command.Month) ? CurrentMonth() : command.Month.Trim();
 
@@ -727,7 +739,8 @@ public sealed class FinanceService(
 
     public async Task<ExpenseItemDto> UpdateExpenseAsync(Guid userId, Guid expenseId, AddExpenseCommand command, CancellationToken ct = default)
     {
-        string type = NormalizeCategoryType(command.Type);
+        HashSet<string> validTypeCodes = await GetValidCategoryTypeCodesAsync(userId, ct);
+        string type = NormalizeCategoryType(command.Type, validTypeCodes);
         string status = NormalizeStatus(command.Status);
         string month = string.IsNullOrWhiteSpace(command.Month) ? CurrentMonth() : command.Month.Trim();
         bool isRecurring = command.IsRecurring ?? (type is "LOAN" or "SUBSCRIPTION");
@@ -1014,12 +1027,13 @@ public sealed class FinanceService(
 
         IReadOnlyList<string> banks = ParseStringArray(settings?.Banks);
         IReadOnlyList<string> brokers = ParseStringArray(settings?.Brokers);
+        IReadOnlyList<FinanceCategoryTypeDef> categoryTypes = ParseCategoryTypes(settings?.CategoryTypes);
 
         IReadOnlyList<FinanceCategoryDef> categoryDefs = categories
             .Select(c => new FinanceCategoryDef(c.Id.ToString(), c.Name, c.Type, c.IsDefault))
             .ToList();
 
-        return new FinanceSettingsDto(new MonthlyIncomeDto(amount, currency), categoryDefs, banks, brokers);
+        return new FinanceSettingsDto(new MonthlyIncomeDto(amount, currency), categoryDefs, banks, brokers, categoryTypes);
     }
 
     private static MonthlyFinanceSummaryDto BuildSummary(
@@ -1171,6 +1185,30 @@ public sealed class FinanceService(
         }
     }
 
+    private static IReadOnlyList<FinanceCategoryTypeDef> ParseCategoryTypes(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<FinanceCategoryTypeDef>>(json, JsonReadOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<HashSet<string>> GetValidCategoryTypeCodesAsync(Guid userId, CancellationToken ct)
+    {
+        string? json = await uow.Dapper.ExecuteScalarAsync<string?>(SelectCategoryTypesJsonSql, new { userId }, ct);
+        HashSet<string> codes = new(CategoryTypes, StringComparer.OrdinalIgnoreCase);
+        foreach (FinanceCategoryTypeDef def in ParseCategoryTypes(json))
+            codes.Add(def.Code.Trim().ToUpperInvariant());
+        return codes;
+    }
+
     private static decimal? ParseDecimal(string? value) =>
         decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed) ? parsed : null;
 
@@ -1192,7 +1230,14 @@ public sealed class FinanceService(
     private static string NormalizeCurrency(string? currency) =>
         string.IsNullOrWhiteSpace(currency) ? "RON" : currency.Trim().ToUpperInvariant();
 
-    private static string NormalizeCategoryType(string? type) => Normalize(type, CategoryTypes, "OTHER");
+    private static string NormalizeCategoryType(string? type, IReadOnlySet<string> validCodes)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+            return "OTHER";
+
+        string upper = type.Trim().ToUpperInvariant();
+        return validCodes.Contains(upper) ? upper : "OTHER";
+    }
 
     private static string NormalizeStatus(string? status) => Normalize(status, ExpenseStatuses, "PAID");
 
@@ -1223,7 +1268,7 @@ public sealed class FinanceService(
         return (amount * fromRate) / toRate;
     }
 
-    private sealed record SettingsRow(decimal MonthlyIncomeAmount, string MonthlyIncomeCurrency, string? Banks, string? Brokers);
+    private sealed record SettingsRow(decimal MonthlyIncomeAmount, string MonthlyIncomeCurrency, string? Banks, string? Brokers, string? CategoryTypes);
 
     private sealed record ExchangeRateRow(string Currency, decimal RateToRon);
 

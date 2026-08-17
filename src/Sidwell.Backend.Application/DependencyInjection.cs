@@ -24,7 +24,6 @@ public static class DependencyInjection
         services.AddScoped<IJobRetryService, JobRetryService>();
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<IFinanceSimulationService, FinanceSimulationService>();
-        services.AddScoped<IScreenerService, ScreenerService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<ITickerNotesService, TickerNotesService>();

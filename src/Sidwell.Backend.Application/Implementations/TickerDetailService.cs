@@ -198,7 +198,11 @@ public sealed class TickerDetailService(
 
         bool hasAnyScore = algorithmRows.Any(r => r.Score is not null) || compositeRow is { Score: not null };
 
-        if (!hasAnyScore && fundamentalsTask.Result.Count > 0)
+        // Fundamentals-less tickers (e.g. BVB) still get a technical-only composite score and
+        // price-based algorithms (e.g. momentum) from NativeRecalcService, so retry recalc for
+        // them too as long as we have any price history to score against — not just when SEC
+        // fundamentals exist.
+        if (!hasAnyScore && (fundamentalsTask.Result.Count > 0 || historyTask.Result.Count > 0))
         {
             bool recalculated = await recalcTrigger.RecalcAsync(ticker.Id, DateOnly.FromDateTime(DateTime.UtcNow), ct);
 
