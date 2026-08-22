@@ -283,6 +283,16 @@ public sealed class FinanceService(
         ORDER BY institution, type, currency, name;
         """;
 
+    // Unlike SelectCumulativeWealthSql (which HAVING-filters out negative-only "phantom" buckets so
+    // standalone withdrawals don't render as their own account card), this has no per-name grouping
+    // or HAVING — every deposit and withdrawal counts, so the total actually reflects reality.
+    private const string SelectWealthTotalByCurrencyAndTypeSql = """
+        SELECT currency AS Currency, institution_type AS InstitutionType, COALESCE(SUM(amount), 0) AS Total
+        FROM wealth_allocations
+        WHERE user_id = @userId AND month <= @month
+        GROUP BY currency, institution_type;
+        """;
+
     private const string SelectNetInvestedByCurrencySql = """
         WITH month_end AS (
             SELECT (to_date(@month || '-01', 'YYYY-MM-DD') + INTERVAL '1 month' - INTERVAL '1 day')::date AS asof
@@ -474,6 +484,27 @@ public sealed class FinanceService(
         Dictionary<string, decimal> investedByCurrency = netInvestedRows
             .ToDictionary(r => (r.Currency ?? "USD").Trim(), r => r.NetInvested, StringComparer.OrdinalIgnoreCase);
 
+        IReadOnlyList<WealthTotalRow> wealthTotalRows = await uow.Dapper.QueryAsync<WealthTotalRow>(
+            SelectWealthTotalByCurrencyAndTypeSql, new { userId, month = normalizedMonth }, ct);
+
+        // Computed from the untouched investedByCurrency snapshot, before the cumulativeWealth loop
+        // below mutates it while netting broker cash against invested capital bucket-by-bucket.
+        Dictionary<string, decimal> trueTotalByCurrency = new(StringComparer.OrdinalIgnoreCase);
+        foreach (WealthTotalRow r in wealthTotalRows)
+        {
+            string curr = r.Currency.Trim();
+            decimal contribution = r.Total;
+            if (string.Equals(r.InstitutionType, "BROKER", StringComparison.OrdinalIgnoreCase)
+                && investedByCurrency.TryGetValue(curr, out decimal invested) && invested > 0)
+            {
+                contribution = Math.Max(0m, r.Total - invested);
+            }
+            trueTotalByCurrency[curr] = trueTotalByCurrency.GetValueOrDefault(curr) + contribution;
+        }
+        IReadOnlyList<CurrencyAmountDto> wealthTotalByCurrency = trueTotalByCurrency
+            .Select(kvp => new CurrencyAmountDto(kvp.Key, FormatMoney(kvp.Value)))
+            .ToList();
+
         IReadOnlyList<ExpenseItemDto> expenses = expenseRows.Select(BuildExpense).ToList();
         IReadOnlyList<WealthAllocationDto> wealth = wealthRows.Select(BuildWealth).ToList();
         IReadOnlyList<WealthAllocationDto> cumulativeWealth = cumulativeWealthRows.Select(row =>
@@ -560,7 +591,7 @@ public sealed class FinanceService(
             .Select(kvp => new PortfolioPnlEntryDto(kvp.Key, FormatMoney(kvp.Value)))
             .ToList();
 
-        return new MonthlyFinancesResponse(summary, expenses, wealth, settings, cumulativeWealth, holdingsAsOfMonth, extraIncomes, todayPortfolioPnl);
+        return new MonthlyFinancesResponse(summary, expenses, wealth, settings, cumulativeWealth, holdingsAsOfMonth, extraIncomes, todayPortfolioPnl, wealthTotalByCurrency);
     }
 
     public async Task<ExtraIncomeDto> AddExtraIncomeAsync(Guid userId, AddExtraIncomeCommand command, CancellationToken ct = default)
@@ -1302,6 +1333,8 @@ public sealed class FinanceService(
         string? Notes,
         DateTimeOffset CreatedAt
     );
+
+    private sealed record WealthTotalRow(string Currency, string InstitutionType, decimal Total);
 
     private sealed record WealthDetailRow(
         string Institution,
