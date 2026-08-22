@@ -265,7 +265,6 @@ public sealed class FinanceService(
         FROM wealth_allocations
         WHERE user_id = @userId AND month <= @month
         GROUP BY institution, institution_type, currency, type, name
-        HAVING SUM(amount) > 0
         ORDER BY institution, type, currency, name;
         """;
 
