@@ -237,6 +237,23 @@ public sealed class FinanceService(
 
     private const string DeleteExpenseSql = "DELETE FROM expenses WHERE id = @id AND user_id = @userId;";
 
+    private const string SelectExpenseSeriesRangeSql = """
+        WITH pivot AS (
+            SELECT name, category, type, amount, currency
+            FROM expenses
+            WHERE id = @expenseId AND user_id = @userId
+        )
+        SELECT MIN(e.month) AS StartMonth, MAX(e.month) AS EndMonth, COUNT(*)::int AS Count
+        FROM expenses e
+        JOIN pivot p
+          ON e.name = p.name
+         AND e.category = p.category
+         AND e.type = p.type
+         AND e.amount = p.amount
+         AND e.currency = p.currency
+        WHERE e.user_id = @userId;
+        """;
+
     private const string SelectWealthSql = """
         SELECT id AS Id, month AS Month, name AS Name, institution AS Institution, institution_type AS InstitutionType,
                type AS Type, amount AS Amount, currency AS Currency, interest_rate_pct AS InterestRatePct,
@@ -1003,6 +1020,22 @@ public sealed class FinanceService(
             LineItems: lineItems
         );
     }
+
+    public async Task<ExpenseSeriesRangeDto?> GetExpenseSeriesRangeAsync(Guid userId, Guid expenseId, CancellationToken ct = default)
+    {
+        SeriesRangeRow? row = await uow.Dapper.QueryFirstOrDefaultAsync<SeriesRangeRow>(
+            SelectExpenseSeriesRangeSql,
+            new { expenseId, userId },
+            ct
+        );
+
+        if (row is null || row.Count == 0 || string.IsNullOrWhiteSpace(row.StartMonth))
+            return null;
+
+        return new ExpenseSeriesRangeDto(row.StartMonth.Trim(), (row.EndMonth ?? row.StartMonth).Trim(), row.Count);
+    }
+
+    private sealed record SeriesRangeRow(string? StartMonth, string? EndMonth, int Count);
 
     public async Task<ExpenseItemDto?> ScanReceiptAsync(Guid userId, Stream imageStream, string? contentType, CancellationToken ct = default)
     {

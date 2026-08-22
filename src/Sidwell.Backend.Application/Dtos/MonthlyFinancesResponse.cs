@@ -2,6 +2,8 @@ namespace Sidwell.Backend.Application.Dtos;
 
 public sealed record CurrencyAmountDto(string Currency, string Amount);
 
+public sealed record ExpenseSeriesRangeDto(string StartMonth, string EndMonth, int Count);
+
 public sealed record MonthlyFinancesResponse(
     MonthlyFinanceSummaryDto Summary,
     IReadOnlyList<ExpenseItemDto> Expenses,

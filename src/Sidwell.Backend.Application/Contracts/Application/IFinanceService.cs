@@ -69,6 +69,8 @@ public interface IFinanceService
 
     Task<ExpenseItemDto?> GetExpenseByIdAsync(Guid userId, Guid expenseId, CancellationToken ct = default);
 
+    Task<ExpenseSeriesRangeDto?> GetExpenseSeriesRangeAsync(Guid userId, Guid expenseId, CancellationToken ct = default);
+
     Task<ExtraIncomeDto> AddExtraIncomeAsync(Guid userId, AddExtraIncomeCommand command, CancellationToken ct = default);
 
     Task DeleteExtraIncomeAsync(Guid userId, Guid extraIncomeId, CancellationToken ct = default);

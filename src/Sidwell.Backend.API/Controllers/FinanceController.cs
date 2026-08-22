@@ -49,6 +49,13 @@ public sealed class FinanceController(
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpGet("expenses/{id:guid}/series-range")]
+    public async Task<IActionResult> GetExpenseSeriesRange(Guid id, CancellationToken ct)
+    {
+        ExpenseSeriesRangeDto? result = await financeService.GetExpenseSeriesRangeAsync(ResolveUserId(), id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost("expenses")]
     public async Task<ActionResult<ExpenseItemDto>> AddExpense([FromBody] AddExpenseRequest request, CancellationToken ct)
     {
