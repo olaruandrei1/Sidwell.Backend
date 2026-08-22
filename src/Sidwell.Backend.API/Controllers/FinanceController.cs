@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sidwell.Backend.API.Auth;
 using Sidwell.Backend.Application.Common;
 using Sidwell.Backend.Application.Contracts.Application;
+using Sidwell.Backend.Application.Contracts.Infrastructure;
 using Sidwell.Backend.Application.Dtos;
 
 namespace Sidwell.Backend.API.Controllers;
@@ -10,12 +11,23 @@ namespace Sidwell.Backend.API.Controllers;
 [ApiController]
 [Route("finances")]
 [Authorize(AuthenticationSchemes = SessionTokenDefaults.AuthenticationScheme)]
-public sealed class FinanceController(IFinanceService financeService, ICurrentUserAccessor currentUser) : ControllerBase
+public sealed class FinanceController(
+    IFinanceService financeService,
+    IExpenseExportService expenseExportService,
+    ICurrentUserAccessor currentUser
+) : ControllerBase
 {
     [HttpGet("settings")]
     public async Task<ActionResult<FinanceSettingsDto>> GetSettings(CancellationToken ct)
     {
         return Ok(await financeService.GetSettingsAsync(ResolveUserId(), ct));
+    }
+
+    [HttpPost("expenses/export")]
+    public async Task<IActionResult> ExportExpenses([FromBody] ExpenseExportRequest request, CancellationToken ct)
+    {
+        JournalReportFile file = await expenseExportService.ExportAsync(ResolveUserId(), request, ct);
+        return File(file.Content, file.ContentType, file.FileName);
     }
 
     [HttpPut("settings")]

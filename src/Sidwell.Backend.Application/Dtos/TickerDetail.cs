@@ -12,7 +12,11 @@ public record TickerDetailTicker(
 
 public record TickerDetailPrice(
     PriceBar? Latest,
-    IReadOnlyList<PriceBar> History
+    IReadOnlyList<PriceBar> History,
+    /// Near-real-time quote while the market is open; null when unavailable (market closed with
+    /// nothing newer than the last daily close, or the live-price source failed) — the frontend
+    /// should fall back to Latest.Close in that case.
+    string? Live
 );
 
 public record TickerDetail(

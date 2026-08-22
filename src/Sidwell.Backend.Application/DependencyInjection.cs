@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IDividendProjectionService, DividendProjectionService>();
         services.AddScoped<IJobRetryService, JobRetryService>();
         services.AddScoped<IFinanceService, FinanceService>();
+        services.AddScoped<IExpenseExportService, ExpenseExportService>();
         services.AddScoped<IFinanceSimulationService, FinanceSimulationService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IAdminService, AdminService>();

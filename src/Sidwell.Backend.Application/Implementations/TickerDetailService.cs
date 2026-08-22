@@ -180,6 +180,7 @@ public sealed class TickerDetailService(
 
         Task<FinnhubStockMetrics?> finnhubTask = finnhub.GetMetricsAsync(ticker.Symbol, ct);
         Task<YfinanceStockMetrics?> yfinanceTask = yfinanceMetrics.GetMetricsAsync(ticker.Symbol, ct);
+        Task<decimal?> livePriceTask = yfinanceMetrics.GetLivePriceAsync(ticker.Symbol, ct);
 
         await Task.WhenAll(
             latestTask,
@@ -193,7 +194,8 @@ public sealed class TickerDetailService(
             watchlistedTask,
             dividendTask,
             finnhubTask,
-            yfinanceTask
+            yfinanceTask,
+            livePriceTask
         );
 
         CompositeRow? compositeRow = compositeTask.Result;
@@ -268,7 +270,7 @@ public sealed class TickerDetailService(
 
         return new TickerDetail(
             new TickerDetailTicker(ticker.Symbol, ticker.Name, ticker.Exchange, ticker.Currency, ticker.SecCik),
-            new TickerDetailPrice(latestTask.Result, historyTask.Result),
+            new TickerDetailPrice(latestTask.Result, historyTask.Result, livePriceTask.Result?.ToString("F4", CultureInfo.InvariantCulture)),
             composite,
             algorithms,
             fundamentalsTask.Result,

@@ -63,6 +63,33 @@ public sealed class YfinanceMetricsClient(
         }
     }
 
+    public async Task<decimal?> GetLivePriceAsync(string symbol, CancellationToken ct = default)
+    {
+        try
+        {
+            HttpClient client = httpClientFactory.CreateClient(HttpClientName);
+            string url = $"api/v1/live-prices?symbol={Uri.EscapeDataString(symbol)}";
+
+            HttpResponseMessage response = await client.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Yfinance /live-prices returned {Status} for {Symbol}", response.StatusCode, symbol);
+                return null;
+            }
+
+            Dictionary<string, decimal?>? body = await response.Content.ReadFromJsonAsync<Dictionary<string, decimal?>>(JsonOptions, ct);
+            if (body is null)
+                return null;
+
+            return body.TryGetValue(symbol.ToUpperInvariant(), out decimal? price) && price is > 0m ? price : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Yfinance /live-prices errored for {Symbol}; returning null.", symbol);
+            return null;
+        }
+    }
+
     private static string? FormatEarningsDate(long? unixTimestamp) =>
         unixTimestamp is { } ts ? DateTimeOffset.FromUnixTimeSeconds(ts).UtcDateTime.ToString("yyyy-MM-dd") : null;
 

@@ -76,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<IReceiptImageProcessor, ReceiptImageProcessor>();
         services.AddSingleton<IJournalReportRenderer, PdfJournalReportRenderer>();
         services.AddSingleton<IJournalReportRenderer, XlsxJournalReportRenderer>();
+        services.AddSingleton<IExpenseExportRenderer, PdfExpenseExportRenderer>();
+        services.AddSingleton<IExpenseExportRenderer, XlsxExpenseExportRenderer>();
         // JournalReportService picks the right one via IEnumerable<IJournalReportRenderer> + CanRender().
         services.AddSingleton<IWebPushService, WebPushService>();
 
