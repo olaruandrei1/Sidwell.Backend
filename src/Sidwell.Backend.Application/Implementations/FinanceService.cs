@@ -253,19 +253,20 @@ public sealed class FinanceService(
     private const string SelectCumulativeWealthSql = """
         SELECT MIN(id::text)::uuid AS Id,
                MAX(month) AS Month,
-               name AS Name,
+               (array_agg(name ORDER BY created_at ASC))[1] AS Name,
                institution AS Institution,
                institution_type AS InstitutionType,
                type AS Type,
                SUM(amount) AS Amount,
                currency AS Currency,
-               MAX(interest_rate_pct) AS InterestRatePct,
-               MAX(notes) AS Notes,
+               (array_agg(interest_rate_pct ORDER BY created_at ASC))[1] AS InterestRatePct,
+               (array_agg(notes ORDER BY created_at ASC))[1] AS Notes,
                MIN(created_at) AS CreatedAt
         FROM wealth_allocations
         WHERE user_id = @userId AND month <= @month
-        GROUP BY institution, institution_type, currency, type, name
-        ORDER BY institution, type, currency, name;
+        GROUP BY institution, institution_type, currency, type
+        HAVING SUM(amount) > 0
+        ORDER BY institution, type, currency;
         """;
 
     // Sub-items per bucket for grey list in Patrimoniu — one row per distinct name inside a bucket.
